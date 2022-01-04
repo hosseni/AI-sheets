@@ -1,0 +1,254 @@
+#!/usr/bin/env python
+# coding: utf-8
+
+# In[1]:
+
+
+1. Import Required Libraries
+# This Python 3 environment comes with many helpful analytics libraries installed
+# It is defined by the kaggle/python Docker image: https://github.com/kaggle/docker-python
+# For example, here's several helpful packages to load
+import numpy as np # linear algebra
+import pandas as pd # data processing, CSV file I/O (e.g. pd.read_csv)
+import matplotlib.pyplot as plt #to plot charts
+import seaborn as sns #used for data visualization
+import warnings #avoid warning flash
+warnings.filterwarnings('ignore')
+
+
+# You can write up to 20GB to the current directory (/kaggle/working/) that gets preserved as output when you create a version using "Save & Run All" 
+# You can also write temporary files to /kaggle/temp/, but they won't be saved outside of the current session
+df=pd.read_csv("../input/pima-indians-diabetes-database/diabetes.csv")
+df.head() #get familier with dataset, display the top 5 data records
+df.shape #getting to know about rows and columns we're dealing with - 768 rows , 9 columns
+df.columns #learning about the columns
+df.info()
+df.dtypes #knowledge of data type helps for computation
+df.describe()
+
+
+# In[2]:
+
+
+#dropping duplicate values - checking if there are any duplicate rows and dropping if any
+df=df.drop_duplicates()
+#check for missing values, count them and print the sum for every column
+df.isnull().sum() #conclusion :- there are no null values in this dataset
+#checking for 0 values in 5 columns , Age & DiabetesPedigreeFunction do not have have minimum 0 value so no need to replace , also no. of pregnancies as 0 is possible as observed in df.describe
+print(df[df['BloodPressure']==0].shape[0])
+print(df[df['Glucose']==0].shape[0])
+print(df[df['SkinThickness']==0].shape[0])
+print(df[df['Insulin']==0].shape[0])
+print(df[df['BMI']==0].shape[0])
+#replacing 0 values with median of that column
+df['Glucose']=df['Glucose'].replace(0,df['Glucose'].mean())#normal distribution
+df['BloodPressure']=df['BloodPressure'].replace(0,df['BloodPressure'].mean())#normal distribution
+df['SkinThickness']=df['SkinThickness'].replace(0,df['SkinThickness'].median())#skewed distribution
+df['Insulin']=df['Insulin'].replace(0,df['Insulin'].median())#skewed distribution
+df['BMI']=df['BMI'].replace(0,df['BMI'].median())#skewed distribution
+
+
+# In[3]:
+
+
+sns.countplot('Outcome',data=df) 
+#histogram for each  feature
+df.hist(bins=10,figsize=(10,10))
+plt.show()
+plt.figure(figsize=(16,12))
+sns.set_style(style='whitegrid')
+plt.subplot(3,3,1)
+sns.boxplot(x='Glucose',data=df)
+plt.subplot(3,3,2)
+sns.boxplot(x='BloodPressure',data=df)
+plt.subplot(3,3,3)
+sns.boxplot(x='Insulin',data=df)
+plt.subplot(3,3,4)
+sns.boxplot(x='BMI',data=df)
+plt.subplot(3,3,5)
+sns.boxplot(x='Age',data=df)
+plt.subplot(3,3,6)
+sns.boxplot(x='SkinThickness',data=df)
+plt.subplot(3,3,7)
+sns.boxplot(x='Pregnancies',data=df)
+plt.subplot(3,3,8)
+sns.boxplot(x='DiabetesPedigreeFunction',data=df)
+plt.figure(figsize=(16,12))
+sns.set_style(style='whitegrid')
+plt.subplot(3,3,1)
+sns.boxplot(x=df_new['Glucose'],data=df_new)
+plt.subplot(3,3,2)
+sns.boxplot(x=df_new['BMI'],data=df_new)
+plt.subplot(3,3,3)
+sns.boxplot(x=df_new['Pregnancies'],data=df_new)
+plt.subplot(3,3,4)
+sns.boxplot(x=df_new['Age'],data=df_new)
+plt.subplot(3,3,5)
+sns.boxplot(x=df_new['SkinThickness'],data=df_new)
+
+
+# In[4]:
+
+
+target_name='Outcome'
+y= df_new[target_name]#given predictions - training data 
+X=df_new.drop(target_name,axis=1)#dropping the Outcome column and keeping all other columns as X
+y.head()
+from sklearn.model_selection import train_test_split
+X_train, X_test, y_train, y_test= train_test_split(X,y,test_size=0.2,random_state=0)#splitting data in 80% train, 20%test
+
+
+# In[5]:
+
+
+from pandas.plotting import scatter_matrix
+scatter_matrix(df,figsize=(20,20));
+# we can come to various conclusion looking at these plots for example  if you observe 5th plot in pregnancies with insulin, you can conclude that women with higher number of pregnancies have lower insulin
+
+
+# In[ ]:
+
+
+#Feature Selection
+corrmat=df.corr()
+sns.heatmap(corrmat, annot=True)
+df_selected=df.drop(['BloodPressure','Insulin','DiabetesPedigreeFunction'],axis='columns')
+from sklearn.preprocessing import QuantileTransformer
+x=df_selected
+quantile  = QuantileTransformer()
+X = quantile.fit_transform(x)
+df_new=quantile.transform(X)
+df_new=pd.DataFrame(X)
+df_new.columns =['Pregnancies', 'Glucose','SkinThickness','BMI','Age','Outcome']
+df_new.head()
+X_train.shape,y_train.shape
+X_test.shape,y_test.shape
+
+
+# In[ ]:
+
+
+from sklearn.neighbors import KNeighborsClassifier
+from sklearn.model_selection import RepeatedStratifiedKFold
+from sklearn.metrics import classification_report,confusion_matrix
+from sklearn.metrics import f1_score, precision_score, recall_score
+from sklearn.model_selection import GridSearchCV
+#List Hyperparameters to tune
+knn= KNeighborsClassifier()
+n_neighbors = list(range(15,25))
+p=[1,2]
+weights = ['uniform', 'distance']
+metric = ['euclidean', 'manhattan', 'minkowski']
+
+#convert to dictionary
+hyperparameters = dict(n_neighbors=n_neighbors, p=p,weights=weights,metric=metric)
+
+#Making model
+cv = RepeatedStratifiedKFold(n_splits=10, n_repeats=3, random_state=1)
+grid_search = GridSearchCV(estimator=knn, param_grid=hyperparameters, n_jobs=-1, cv=cv, scoring='f1',error_score=0)
+best_model = grid_search.fit(X_train,y_train)
+#Best Hyperparameters Value
+print('Best leaf_size:', best_model.best_estimator_.get_params()['leaf_size'])
+print('Best p:', best_model.best_estimator_.get_params()['p'])
+print('Best n_neighbors:', best_model.best_estimator_.get_params()['n_neighbors'])
+#Predict testing set
+knn_pred = best_model.predict(X_test)
+print("Classification Report is:\n",classification_report(y_test,knn_pred))
+print("\n F1:\n",f1_score(y_test,knn_pred))
+print("\n Precision score is:\n",precision_score(y_test,knn_pred))
+print("\n Recall score is:\n",recall_score(y_test,knn_pred))
+print("\n Confusion Matrix:\n")
+sns.heatmap(confusion_matrix(y_test,knn_pred))
+from sklearn.naive_bayes import GaussianNB
+from sklearn.model_selection import GridSearchCV
+
+param_grid_nb = {
+    'var_smoothing': np.logspace(0,-2, num=100)
+}
+nbModel_grid = GridSearchCV(estimator=GaussianNB(), param_grid=param_grid_nb, verbose=1, cv=10, n_jobs=-1)
+best_model= nbModel_grid.fit(X_train, y_train)
+nb_pred=best_model.predict(X_test)
+print("Classification Report is:\n",classification_report(y_test,nb_pred))
+print("\n F1:\n",f1_score(y_test,nb_pred))
+print("\n Precision score is:\n",precision_score(y_test,nb_pred))
+print("\n Recall score is:\n",recall_score(y_test,nb_pred))
+print("\n Confusion Matrix:\n")
+sns.heatmap(confusion_matrix(y_test,nb_pred))
+
+
+# In[6]:
+
+
+from sklearn.tree import DecisionTreeClassifier
+from sklearn.metrics import classification_report,confusion_matrix
+from sklearn.metrics import classification_report,confusion_matrix
+from sklearn.metrics import f1_score, precision_score, recall_score
+from sklearn.model_selection import GridSearchCV
+dt = DecisionTreeClassifier(random_state=42)
+# Create the parameter grid based on the results of random search 
+params = {
+    'max_depth': [5, 10, 20,25],
+    'min_samples_leaf': [10, 20, 50, 100,120],
+    'criterion': ["gini", "entropy"]
+}
+grid_search = GridSearchCV(estimator=dt, 
+                           param_grid=params, 
+                           cv=4, n_jobs=-1, verbose=1, scoring = "accuracy")
+best_model=grid_search.fit(X_train, y_train)
+dt_pred=best_model.predict(X_test)
+print("Classification Report is:\n",classification_report(y_test,dt_pred))
+print("\n F1:\n",f1_score(y_test,dt_pred))
+print("\n Precision score is:\n",precision_score(y_test,dt_pred))
+print("\n Recall score is:\n",recall_score(y_test,dt_pred))
+print("\n Confusion Matrix:\n")
+sns.heatmap(confusion_matrix(y_test,dt_pred))
+
+
+# In[ ]:
+
+
+from sklearn.ensemble import RandomForestClassifier
+from sklearn.metrics import classification_report,confusion_matrix
+from sklearn.metrics import f1_score, precision_score, recall_score
+from sklearn.model_selection import RepeatedStratifiedKFold
+from sklearn.model_selection import GridSearchCV
+# define models and parameters
+model = RandomForestClassifier()
+n_estimators = [1800]
+max_features = ['sqrt', 'log2']
+# define grid search
+grid = dict(n_estimators=n_estimators,max_features=max_features)
+cv = RepeatedStratifiedKFold(n_splits=10, n_repeats=3, random_state=1)
+grid_search = GridSearchCV(estimator=model, param_grid=grid, n_jobs=-1, cv=cv, scoring='accuracy',error_score=0)
+best_model = grid_search.fit(X_train, y_train)
+rf_pred=best_model.predict(X_test)
+print("Classification Report is:\n",classification_report(y_test,rf_pred))
+print("\n F1:\n",f1_score(y_test,knn_pred))
+print("\n Precision score is:\n",precision_score(y_test,knn_pred))
+print("\n Recall score is:\n",recall_score(y_test,knn_pred))
+print("\n Confusion Matrix:\n")
+sns.heatmap(confusion_matrix(y_test,rf_pred))
+
+
+# In[ ]:
+
+
+from sklearn.linear_model import LogisticRegression
+from sklearn.metrics import classification_report,confusion_matrix
+from sklearn.metrics import f1_score, precision_score, recall_score,accuracy_score
+reg = LogisticRegression()
+reg.fit(X_train,y_train)           
+lr_pred=reg.predict(X_test)
+print("Classification Report is:\n",classification_report(y_test,lr_pred))
+print("\n F1:\n",f1_score(y_test,lr_pred))
+print("\n Precision score is:\n",precision_score(y_test,lr_pred))
+print("\n Recall score is:\n",recall_score(y_test,lr_pred))
+print("\n Confusion Matrix:\n")
+sns.heatmap(confusion_matrix(y_test,lr_pred))
+
+
+# In[ ]:
+
+
+
+
